@@ -11,3 +11,4 @@ tmp/
 # generated files
 exportToHTML/
 
+*.pyc
