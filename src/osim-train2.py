@@ -30,7 +30,7 @@ import numpy as np
 
 from osim.env import *
 from osim.http.client import Client
-from keras.optimizers import RMSprop
+#from keras.optimizers import RMSprop
 import math
 
 from policy import Policy

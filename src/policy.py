@@ -62,8 +62,8 @@ class Policy(object):
          for each action dimension (i.e. variances not determined by NN).
         """
         # hidden layer sizes determined by obs_dim and act_dim (hid2 is geometric mean)
-        hid1_size = self.obs_dim * 10  # 10 empirically determined
-        hid3_size = self.act_dim * 10  # 10 empirically determined
+        hid1_size = self.obs_dim * 2  # 10 empirically determined
+        hid3_size = self.act_dim * 2  # 10 empirically determined
         hid2_size = int(np.sqrt(hid1_size * hid3_size))
         # heuristic to set learning rate based on NN size (tuned on 'Hopper-v1')
         self.lr = 9e-4 / np.sqrt(hid2_size)  # 9e-4 empirically determined
