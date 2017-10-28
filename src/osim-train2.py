@@ -79,7 +79,7 @@ def run_episode(env, policy, scaler, animate=False):
         rewards: shape = (episode len,)
         unscaled_obs: useful for training scaler, shape = (episode len, obs_dim)
     """
-    obs = np.array(env.reset())
+    obs = np.array(env.reset(difficulty=0))
     observes, actions, rewards, unscaled_obs = [], [], [], []
     done = False
     step = 0.0
@@ -94,8 +94,19 @@ def run_episode(env, policy, scaler, animate=False):
         unscaled_obs.append(obs)
         obs = (obs - offset) * scale  # center and scale observations
         observes.append(obs)
+
+        #old_obs = obs
+
         action = policy.sample(obs).reshape((1, -1)).astype(np.float32)
         actions.append(action)
+
+        #if step>0.01 and step<0.011:
+        #    print("OBSERVE",old_obs.shape,old_obs)
+        #    a=np.squeeze(action, axis=0)
+        #    print("ACTION",a.shape,a)
+        #    print("REWARD",reward)
+        #    print()
+
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
         obs = np.array(obs)
         if not isinstance(reward, float):
