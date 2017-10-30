@@ -96,17 +96,8 @@ def run_episode(env, policy, scaler, animate=False):
         obs = (obs - offset) * scale  # center and scale observations
         observes.append(obs)
 
-        #old_obs = obs
-
         action = policy.sample(obs).reshape((1, -1)).astype(np.float32)
         actions.append(action)
-
-        #if step>0.01 and step<0.011:
-        #    print("OBSERVE",old_obs.shape,old_obs)
-        #    a=np.squeeze(action, axis=0)
-        #    print("ACTION",a.shape,a)
-        #    print("REWARD",reward)
-        #    print()
 
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
         obs = np.array(obs)
@@ -261,7 +252,8 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 '_Episode': episode
                 })
 
-def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs, policy_hid_list, valfunc_hid_list, gpu_pct):
+def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
+         policy_hid_list, valfunc_hid_list, gpu_pct, restore_path):
     """ Main training loop
 
     Args:
@@ -279,8 +271,8 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs, policy
     mpi_util.set_global_seeds(111 + mpi_util.rank)
 
     obs_dim += 1  # add 1 to obs dimension for time step feature (see run_episode())
+    now = datetime.utcnow().strftime("%b-%d_%H:%M:%S")  # create unique directories
     if mpi_util.rank == 0:
-        now = datetime.utcnow().strftime("%b-%d_%H:%M:%S")  # create unique directories
         #aigym_path = os.path.join('/tmp', env_name, now)
         #env = wrappers.Monitor(env, aigym_path, force=True)
         logger = Logger(logname=env_name, now=now)
@@ -289,13 +281,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs, policy
     val_func = NNValueFunction(obs_dim)
     scaler = Scaler(obs_dim)
 
-    checkpoint = Checkpoint("saves")
-    if 0:
-        if mpi_util.rank == 0: checkpoint.save(policy, val_func, scaler)
-    else:
-        (policy, val_func, scaler) = checkpoint.restore(policy, val_func, scaler)
-
-    if mpi_util.rank == 0:
+    if False and mpi_util.rank == 0:
         # run a few episodes (on node 0) of untrained policy to initialize scaler:
         trajectories = run_policy(env, policy, scaler, episodes=5)
 
@@ -311,7 +297,22 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs, policy
         exit(1)
 
     episode = 0
+
+    # restore from checkpoint?
+    checkpoint = Checkpoint("saves", now)
+    if restore_path:
+        (policy, val_func, scaler, episode) = checkpoint.restore(policy, val_func, scaler, restore_path)
+    else:
+        checkpoint.save(policy, val_func, scaler, episode)
+        #checkpoint.save(policy, val_func, scaler, 100)
+        #checkpoint.save(policy, val_func, scaler, 200)
+        exit(1)
+
+    batch = 0
     while episode < num_episodes:
+        if mpi_util.rank == 0 and batch>0 and batch%1 == 0: checkpoint.save(policy, val_func, scaler, episode)
+        batch = batch+1
+
         trajectories = run_policy(env, policy, scaler, episodes=worker_batch_size)
         trajectories = mpi_util.gather_trajectories(trajectories)
 
@@ -369,6 +370,9 @@ if __name__ == "__main__":
     parser.add_argument('-b', '--batch_size', type=int,
                         help='Number of episodes per training batch',
                         default=20)
+    parser.add_argument('-r', '--restore_path', type=str,
+                        help='Restore path',
+                        default=None)
 
     parser.add_argument('--nprocs', type=int, default=1)
     parser.add_argument('--gpu_pct', type=float, default=0.0, help ='tensorflow  per_process_gpu_memory_fraction  option. .08 may work for 10 processes')

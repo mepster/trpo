@@ -5,20 +5,25 @@ import pickle
 
 class Checkpoint(object):
     """ save and restore checkpoints """
-    def __init__(self, checkpoints_dir):
-        now = datetime.utcnow().strftime("%b-%d_%H:%M:%S")
-        self.dir = checkpoints_dir+"/timestamp"
-        #self.dir = checkpoints_dir+"/"+now
+    def __init__(self, checkpoints_dir, init_time):
+        self.checkpoints_dir = checkpoints_dir
+        self.init_time = init_time
 
-    def _mypath(self, global_step=None):
-        if global_step:
-            return self.dir+"-"+global_step
-        else:
-            return self.dir
-        
-    def save(self, policy, val_func, scaler, global_step=None):
-        mypath = self._mypath(global_step)
+    def _savepath(self, episode):
+        return self.checkpoints_dir+"/"+self.init_time+"-"+str(episode)
+
+    def dump_vars(graph):
+        for var in sorted(graph.get_collection('trainable_variables'),key=lambda x: x.name):
+            print(var.name, var)
+        for var in sorted(graph.get_collection('global_variables'),key=lambda x: x.name):
+            print(var.name, var)
+        for var in sorted(graph.get_collection('local_variables'),key=lambda x: x.name):
+            print(var.name, var)
+    
+    def save(self, policy, val_func, scaler, episode):
+        mypath = self._savepath(episode)
         print("saving checkpoint to:", mypath)
+        Checkpoint.dump_vars(policy.g)
 
         # vars = policy.g.get_collection('trainable_variables')
         # signature_def_map={x.name:x for x in vars}
@@ -53,32 +58,40 @@ class Checkpoint(object):
 
         # pickle and save scaler
         with open(mypath+".scaler", 'wb') as f:
-            pickle.dump(scaler, f)
+            pickle.dump((scaler, episode), f)
 
+    def restore(self, policy, val_func, scaler, restore_path):
+        #mypath = self.checkpoints_dir+"/"+restore_path
+        mypath = restore_path
 
-    def restore(self, policy, val_func, scaler, global_step=None):
-        mypath = self._mypath(global_step)
         print("restoring checkpoint from:", mypath)
 
+        from policy import Policy
+        from value_function import NNValueFunction
+        
+        policy.sess.close()
+        policy = Policy(policy.obs_dim, policy.act_dim, policy.kl_targ)
         with policy.g.as_default():
-            policy.sess.close()
-            policy.sess=tf.Session()
+            print("0000000")
+            Checkpoint.dump_vars(tf.get_default_graph())
             tf.saved_model.loader.load(policy.sess, [tf.saved_model.tag_constants.TRAINING], mypath+".policy")
-            policy.g = policy.sess.graph
-            policy.sess.run(tf.global_variables_initializer())
+            print("11111111")
+            Checkpoint.dump_vars(tf.get_default_graph())
 
+        val_func.sess.close()
+        val_func = NNValueFunction(val_func.obs_dim)
         with val_func.g.as_default():
-            val_func.sess.close()
-            val_func.sess=tf.Session()
+            print("2222222")
+            Checkpoint.dump_vars(tf.get_default_graph())
             tf.saved_model.loader.load(val_func.sess, [tf.saved_model.tag_constants.TRAINING], mypath+".val_func")
-            val_func.g = val_func.sess.graph
-            val_func.sess.run(tf.global_variables_initializer())
+            print("3333333")
+            Checkpoint.dump_vars(tf.get_default_graph())
 
         # unpickle and restore scaler
         with open(mypath+".scaler", 'rb') as f:
-            scaler = pickle.load(f)
+            (scaler, episode) = pickle.load(f)
 
-        return(policy, val_func, scaler)
+        return(policy, val_func, scaler, episode)
         
 class CheckpointOld(object):
     """ save and restore checkpoints """
