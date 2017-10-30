@@ -57,8 +57,8 @@ class NNValueFunction(object):
             optimizer = tf.train.AdamOptimizer(self.lr)
             self.train_op = optimizer.minimize(self.loss)
             self.init = tf.global_variables_initializer()
-        self.sess = tf.Session(graph=self.g)
-        self.sess.run(self.init)
+        #self.sess = tf.Session(graph=self.g) # can remove this?
+        #self.sess.run(self.init) # can remove this?
 
     def fit(self, x, y, logger):
         """ Fit model to current data batch + previous data batch

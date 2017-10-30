@@ -35,6 +35,7 @@ import math
 
 from policy import Policy
 from value_function import NNValueFunction
+from checkpoint import Checkpoint
 import scipy.signal
 from utils import Logger, Scaler
 from datetime import datetime
@@ -260,7 +261,6 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 '_Episode': episode
                 })
 
-
 def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs, policy_hid_list, valfunc_hid_list, gpu_pct):
     """ Main training loop
 
@@ -286,8 +286,14 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs, policy
         logger = Logger(logname=env_name, now=now)
 
     policy = Policy(obs_dim, act_dim, kl_targ)
-    scaler = Scaler(obs_dim)
     val_func = NNValueFunction(obs_dim)
+    scaler = Scaler(obs_dim)
+
+    checkpoint = Checkpoint("saves")
+    if 0:
+        if mpi_util.rank == 0: checkpoint.save(policy, val_func, scaler)
+    else:
+        (policy, val_func, scaler) = checkpoint.restore(policy, val_func, scaler)
 
     if mpi_util.rank == 0:
         # run a few episodes (on node 0) of untrained policy to initialize scaler:
