@@ -62,14 +62,12 @@ class Checkpoint(object):
         Checkpoint.dump_vars(policy.g)
 
         with policy.g.as_default():
-            with policy.sess as sess:
-                saver = tf.train.Saver()
-                saver.save(sess, mypath+".policy")#, global_step=episode)
+            saver = tf.train.Saver()
+            saver.save(policy.sess, mypath+".policy")#, global_step=episode)
 
         with val_func.g.as_default():
-            with val_func.sess as sess:
-                saver = tf.train.Saver()
-                saver.save(sess, mypath+".val_func")#, global_step=episode)
+            saver = tf.train.Saver()
+            saver.save(val_func.sess, mypath+".val_func")#, global_step=episode)
 
         # pickle and save scaler
         with open(mypath+".scaler", 'wb') as f:
@@ -84,37 +82,33 @@ class Checkpoint(object):
         # policy
         policy.sess.close()
         policy.g = tf.Graph()
-        with policy.g.as_default():
-            imported_meta1 = tf.train.import_meta_graph(mypath+".policy.meta")
-
         policy.sess = tf.Session(graph=policy.g)
         with policy.g.as_default():
-            with policy.sess.as_default():
-                print("0000000")
-                Checkpoint.dump_vars(tf.get_default_graph())
-                imported_meta1.restore(tf.get_default_session(), mypath+".policy")
-                print("1111111")
-                Checkpoint.dump_vars(tf.get_default_graph())
+            imported_meta1 = tf.train.import_meta_graph(mypath+".policy.meta")
+            print("0000000")
+            Checkpoint.dump_vars(tf.get_default_graph())
+            imported_meta1.restore(policy.sess, mypath+".policy")
+            print("1111111")
+            Checkpoint.dump_vars(tf.get_default_graph())
+            policy._placeholders()
 
         # val_func
         val_func.sess.close()
         val_func.g = tf.Graph()
-        with val_func.g.as_default():
-            imported_meta2 = tf.train.import_meta_graph(mypath+".val_func.meta")
-
         val_func.sess = tf.Session(graph=val_func.g)
         with val_func.g.as_default():
-            with val_func.sess.as_default():
-                print("2222222")
-                Checkpoint.dump_vars(tf.get_default_graph())
-                imported_meta2.restore(tf.get_default_session(), mypath+".val_func")
-                print("3333333")
-                Checkpoint.dump_vars(tf.get_default_graph())
+            imported_meta2 = tf.train.import_meta_graph(mypath+".val_func.meta")
+            print("2222222")
+            Checkpoint.dump_vars(tf.get_default_graph())
+            imported_meta2.restore(val_func.sess, mypath+".val_func")
+            print("3333333")
+            Checkpoint.dump_vars(tf.get_default_graph())
 
         # unpickle and restore scaler
         with open(mypath+".scaler", 'rb') as f:
             (scaler, episode) = pickle.load(f)
 
+        print("FINISHED RESTORE")
         return(policy, val_func, scaler, episode)
 
 
