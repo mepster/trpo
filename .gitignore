@@ -13,3 +13,5 @@ exportToHTML/
 
 *.pyc
 *~
+#*
+.#*
