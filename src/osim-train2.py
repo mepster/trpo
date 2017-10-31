@@ -304,9 +304,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
         (policy, val_func, scaler, episode) = checkpoint.restore(policy, val_func, scaler, restore_path)
     else:
         checkpoint.save(policy, val_func, scaler, episode)
-        #checkpoint.save(policy, val_func, scaler, 100)
-        #checkpoint.save(policy, val_func, scaler, 200)
-        exit(1)
+        #exit(1)
 
     batch = 0
     while episode < num_episodes:
