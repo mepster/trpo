@@ -64,13 +64,12 @@ class NNValueFunction(object):
         """Launch TensorFlow session and initialize variables"""
         with self.g.as_default():
             self.sess = tf.Session(graph=self.g)
+            self.sess.run(self.init)
             if self.restore_path:
                 # restore from checkpoint
                 print("restore path is", self.restore_path)
                 saver = tf.train.Saver()
                 saver.restore(self.sess, self.restore_path)
-
-            self.sess.run(self.init)
 
     def fit(self, x, y, logger):
         """ Fit model to current data batch + previous data batch
