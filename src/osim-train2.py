@@ -92,8 +92,8 @@ def special_reward(obs, reward, step):
     x0=0.0
     x2 = x/(1.0+np.exp(-1.0*k1*(x-x0)))
 
-    l_targ = -0.1+0.4*np.sin(np.pi*x2)       # relative to pelvis
-    r_targ = -0.1+0.4*np.sin(np.pi*x2+np.pi) # relative to pelvis
+    l_targ = -0.3+0.4*np.sin(np.pi*x2)       # relative to pelvis
+    r_targ = -0.3+0.4*np.sin(np.pi*x2+np.pi) # relative to pelvis
     l_act = obs[STATE_TALUS_L_X] - obs[STATE_PELVIS_X] 
     r_act = obs[STATE_TALUS_R_X] - obs[STATE_PELVIS_X]
     l_diff = l_act-l_targ
