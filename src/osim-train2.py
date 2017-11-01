@@ -277,34 +277,33 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
         #env = wrappers.Monitor(env, aigym_path, force=True)
         logger = Logger(logname=env_name, now=now)
 
-    policy = Policy(obs_dim, act_dim, kl_targ)
-    val_func = NNValueFunction(obs_dim)
-    scaler = Scaler(obs_dim)
+    episode = 0
 
-    if False and mpi_util.rank == 0:
-        # run a few episodes (on node 0) of untrained policy to initialize scaler:
-        trajectories = run_policy(env, policy, scaler, episodes=5)
+    checkpoint = Checkpoint("saves", now)
+    # restore from checkpoint?
+    if restore_path:
+        (policy, val_func, scaler, episode) = checkpoint.restore(policy, val_func, scaler, restore_path)
+    else:
+        policy = Policy(obs_dim, act_dim, kl_targ)
+        val_func = NNValueFunction(obs_dim)
+        scaler = Scaler(obs_dim)
 
-        unscaled = np.concatenate([t['unscaled_obs'] for t in trajectories])
-        scaler.update(unscaled)  # update running statistics for scaling observations
+        if mpi_util.rank == 0:
+            # run a few episodes (on node 0) of untrained policy to initialize scaler:
+            trajectories = run_policy(env, policy, scaler, episodes=5)
 
-    # broadcast policy weights, scaler, val_func
-    (policy, scaler, val_func) = mpi_util.broadcast_policy_scaler_val(policy, scaler, val_func)
+            unscaled = np.concatenate([t['unscaled_obs'] for t in trajectories])
+            scaler.update(unscaled)  # update running statistics for scaling observations
+
+        # broadcast policy weights, scaler, val_func
+        (policy, scaler, val_func) = mpi_util.broadcast_policy_scaler_val(policy, scaler, val_func)
+
+        if mpi_util.rank == 0: checkpoint.save(policy, val_func, scaler, episode)
 
     worker_batch_size = int(batch_size / mpi_util.nworkers) # HACK
     if (worker_batch_size*mpi_util.nworkers != batch_size):
         print("batch_size:", batch_size, " is not divisible by nworkers:", mpi_util.nworkers)
         exit(1)
-
-    episode = 0
-
-    # restore from checkpoint?
-    checkpoint = Checkpoint("saves", now)
-    if restore_path:
-        (policy, val_func, scaler, episode) = checkpoint.restore(policy, val_func, scaler, restore_path)
-    else:
-        checkpoint.save(policy, val_func, scaler, episode)
-        #exit(1)
 
     batch = 0
     while episode < num_episodes:

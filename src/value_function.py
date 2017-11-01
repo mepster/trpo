@@ -11,19 +11,19 @@ from sklearn.utils import shuffle
 
 class NNValueFunction(object):
     """ NN-based state-value function """
-    def __init__(self, obs_dim):
+    def __init__(self, obs_dim, restore_path=None):
         """
         Args:
             obs_dim: number of dimensions in observation vector (int)
         """
+        self.restore_path = restore_path
         self.replay_buffer_x = None
         self.replay_buffer_y = None
         self.obs_dim = obs_dim
         self.epochs = 10
         self.lr = None  # learning rate set in _build_graph()
         self._build_graph()
-        self.sess = tf.Session(graph=self.g)
-        self.sess.run(self.init)
+        self._init_session()
 
     def _build_graph(self):
         """ Construct TensorFlow graph, including loss function, init op and train op """
@@ -39,6 +39,7 @@ class NNValueFunction(object):
             self.lr = 1e-2 / np.sqrt(hid2_size)  # 1e-3 empirically determined
             print('Value Params -- h1: {}, h2: {}, h3: {}, lr: {:.3g}'
                   .format(hid1_size, hid2_size, hid3_size, self.lr))
+
             # 3 hidden layers with tanh activations
             out = tf.layers.dense(self.obs_ph, hid1_size, tf.tanh,
                                   kernel_initializer=tf.random_normal_initializer(
@@ -52,13 +53,24 @@ class NNValueFunction(object):
             out = tf.layers.dense(out, 1,
                                   kernel_initializer=tf.random_normal_initializer(
                                       stddev=np.sqrt(1 / hid3_size)), name='output')
+
             self.out = tf.squeeze(out)
             self.loss = tf.reduce_mean(tf.square(self.out - self.val_ph))  # squared loss
             optimizer = tf.train.AdamOptimizer(self.lr)
             self.train_op = optimizer.minimize(self.loss)
             self.init = tf.global_variables_initializer()
-        #self.sess = tf.Session(graph=self.g) # can remove this?
-        #self.sess.run(self.init) # can remove this?
+
+    def _init_session(self):
+        """Launch TensorFlow session and initialize variables"""
+        with self.g.as_default():
+            self.sess = tf.Session(graph=self.g)
+            if self.restore_path:
+                # restore from checkpoint
+                print("restore path is", self.restore_path)
+                saver = tf.train.Saver()
+                saver.restore(self.sess, self.restore_path)
+
+            self.sess.run(self.init)
 
     def fit(self, x, y, logger):
         """ Fit model to current data batch + previous data batch

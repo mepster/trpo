@@ -9,13 +9,14 @@ import tensorflow as tf
 
 class Policy(object):
     """ NN-based policy approximation """
-    def __init__(self, obs_dim, act_dim, kl_targ):
+    def __init__(self, obs_dim, act_dim, kl_targ, restore_path=None):
         """
         Args:
             obs_dim: num observation dimensions (int)
             act_dim: num action dimensions (int)
             kl_targ: target KL divergence between pi_old and pi_new
         """
+        self.restore_path = restore_path
         self.beta = 1.0  # dynamically adjusted D_KL loss multiplier
         self.eta = 50  # multiplier for D_KL-kl_targ hinge-squared loss
         self.kl_targ = kl_targ
@@ -67,6 +68,7 @@ class Policy(object):
         hid2_size = int(np.sqrt(hid1_size * hid3_size))
         # heuristic to set learning rate based on NN size (tuned on 'Hopper-v1')
         self.lr = 9e-4 / np.sqrt(hid2_size)  # 9e-4 empirically determined
+
         # 3 hidden layers with tanh activations
         out = tf.layers.dense(self.obs_ph, hid1_size, tf.tanh,
                               kernel_initializer=tf.random_normal_initializer(
@@ -151,8 +153,15 @@ class Policy(object):
 
     def _init_session(self):
         """Launch TensorFlow session and initialize variables"""
-        self.sess = tf.Session(graph=self.g)
-        self.sess.run(self.init)
+        with self.g.as_default():
+            self.sess = tf.Session(graph=self.g)
+            if self.restore_path:
+                # restore from checkpoint
+                print("restore path is", self.restore_path)
+                saver = tf.train.Saver()
+                saver.restore(self.sess, self.restore_path)
+
+            self.sess.run(self.init)
 
     def sample(self, obs):
         """Draw sample from policy distribution"""
