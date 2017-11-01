@@ -25,6 +25,10 @@ This implementation learns policies for continuous environments
 in the OpenAI Gym (https://gym.openai.com/). Testing was focused on
 the MuJoCo control tasks.
 """
+
+import sys
+sys.path.insert(0, "/home/mep/Repos/opensim")
+print(sys.path)
 import opensim as osim
 import numpy as np
 
@@ -57,12 +61,51 @@ class GracefulKiller:
         self.kill_now = True
 
 
-def init_osim():
-    env = RunEnv(False)
+def init_osim(animate=False):
+    env = RunEnv(animate)
     obs_dim = env.observation_space.shape[0]
     act_dim = env.action_space.shape[0]
 
     return env, obs_dim, act_dim
+
+STATE_PELVIS_X = 1
+STATE_PELVIS_Y = 2
+MUSCLES_PSOAS_R = 3
+MUSCLES_PSOAS_L = 11
+
+STATE_TOES_L_X = 28
+STATE_TOES_L_Y = 29
+STATE_TOES_R_X = 30
+STATE_TOES_R_Y = 31
+STATE_TALUS_L_X = 32
+STATE_TALUS_L_Y = 33
+STATE_TALUS_R_X = 34
+STATE_TALUS_R_Y = 35
+
+def special_reward(obs, reward, step):
+    error = 0.0
+    
+    cycle=0.075
+    x = step/cycle
+
+    k1=0.5
+    x0=0.0
+    x2 = x/(1.0+np.exp(-1.0*k1*(x-x0)))
+
+    l_targ = -0.1+0.4*np.sin(np.pi*x2)       # relative to pelvis
+    r_targ = -0.1+0.4*np.sin(np.pi*x2+np.pi) # relative to pelvis
+    l_act = obs[STATE_TALUS_L_X] - obs[STATE_PELVIS_X] 
+    r_act = obs[STATE_TALUS_R_X] - obs[STATE_PELVIS_X]
+    l_diff = l_act-l_targ
+    r_diff = r_act-r_targ
+
+    k2=0.02 # error term relative magnitude compared to reward
+    k3=0.5 # rate of damping function
+    error = k2*math.sqrt(l_diff*l_diff + r_diff*r_diff)*math.exp(-k3*x)
+    #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
+    #print("step:", step, "x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
+    #print("reward:", reward, "error:", error)
+    return reward - error
 
 def run_episode(env, policy, scaler, animate=False):
     """ Run single episode with option to animate
@@ -100,6 +143,12 @@ def run_episode(env, policy, scaler, animate=False):
         actions.append(action)
 
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
+        #print(obs)
+        reward = special_reward(obs, reward, step)
+        #print("reward:", reward)
+        #print("pelvis:", obs[STATE_PELVIS_X], obs[STATE_PELVIS_Y])
+        #print("talus_r:", obs[STATE_TOES_R_X], obs[STATE_TOES_R_Y])
+
         obs = np.array(obs)
         if not isinstance(reward, float):
             reward = np.asscalar(reward)
@@ -253,7 +302,7 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 })
 
 def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
-         policy_hid_list, valfunc_hid_list, gpu_pct, restore_path):
+         policy_hid_list, valfunc_hid_list, gpu_pct, restore_path, animate):
     """ Main training loop
 
     Args:
@@ -266,7 +315,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
     """
     # killer = GracefulKiller()
 
-    env, obs_dim, act_dim = init_osim()
+    env, obs_dim, act_dim = init_osim(animate)
     env.seed(111 + mpi_util.rank)
     mpi_util.set_global_seeds(111 + mpi_util.rank)
 
@@ -300,6 +349,10 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
 
         if mpi_util.rank == 0: checkpoint.save(policy, val_func, scaler, episode)
 
+    if animate:
+        observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=animate)
+        exit(0)
+    
     worker_batch_size = int(batch_size / mpi_util.nworkers) # HACK
     if (worker_batch_size*mpi_util.nworkers != batch_size):
         print("batch_size:", batch_size, " is not divisible by nworkers:", mpi_util.nworkers)
@@ -352,7 +405,6 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
     policy.close_sess()
     if mpi_util.rank == 0: val_func.close_sess()
 
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=('Train policy on OpenAI Gym environment '
                                                   'using Proximal Policy Optimizer'))
@@ -371,6 +423,7 @@ if __name__ == "__main__":
                         help='Restore path',
                         default=None)
 
+    parser.add_argument('-a', '--animate', action='store_true')
     parser.add_argument('--nprocs', type=int, default=1)
     parser.add_argument('--gpu_pct', type=float, default=0.0, help ='tensorflow  per_process_gpu_memory_fraction  option. .08 may work for 10 processes')
     parser.add_argument('--policy_hid_list', type=str, help='comma separated 3 layer list.  [30,40,25]', default='[]')
