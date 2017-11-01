@@ -307,7 +307,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
 
     batch = 0
     while episode < num_episodes:
-        if mpi_util.rank == 0 and batch>0 and batch%1 == 0: checkpoint.save(policy, val_func, scaler, episode)
+        if mpi_util.rank == 0 and batch>0 and batch%10 == 0: checkpoint.save(policy, val_func, scaler, episode)
         batch = batch+1
 
         trajectories = run_policy(env, policy, scaler, episodes=worker_batch_size)

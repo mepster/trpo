@@ -47,19 +47,19 @@ class Checkpoint(object):
 
     def restore(self, restore_path):
         # unpickle and restore scaler - NOTE: this file includes some other variables too
-        mypath = restore_path.replace('policy', 'scaler')
+        mypath = restore_path
         with open(mypath+".scaler", 'rb') as f:
             (scaler, episode, obs_dim, act_dim, kl_targ, self.init_time) = pickle.load(f)
 
         # policy
-        mypath = restore_path
+        mypath = restore_path.replace('scaler', 'policy')
         print("restoring policy checkpoint from:", mypath)
         policy = Policy(obs_dim, act_dim, kl_targ, restore_path=mypath)
         print("0000000")
         Checkpoint.dump_vars(policy.g)
 
         # val_func
-        mypath = restore_path.replace('policy', 'val_func')
+        mypath = restore_path.replace('scaler', 'val_func')
         print("restoring policy checkpoint from:", mypath)
         val_func = NNValueFunction(obs_dim, restore_path=mypath)
         print("2222222")
