@@ -282,7 +282,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
     checkpoint = Checkpoint("saves", now)
     # restore from checkpoint?
     if restore_path:
-        (policy, val_func, scaler, episode) = checkpoint.restore(policy, val_func, scaler, restore_path)
+        (policy, val_func, scaler, episode, obs_dim, act_dim, kl_targ) = checkpoint.restore(restore_path)
     else:
         policy = Policy(obs_dim, act_dim, kl_targ)
         val_func = NNValueFunction(obs_dim)

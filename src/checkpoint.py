@@ -24,8 +24,13 @@ class Checkpoint(object):
             print(var.name, var)
     
     def save(self, policy, val_func, scaler, episode):
-        if mpi_util.rank != 0: return
-        
+        # pickle and save scaler - NOTE: this file includes some other variables too
+        mypath = self.checkpoints_dir+"/scaler/"+self.init_time
+        makedirs("/".join(mypath.split("/")[:-1]))
+        print("saving scaler checkpoint to:", mypath, "episode:", episode)
+        with open(mypath+"-"+str(episode)+".scaler", 'wb') as f:
+            pickle.dump((scaler, episode, policy.obs_dim, policy.act_dim, policy.kl_targ, self.init_time), f)
+
         mypath = self.checkpoints_dir+"/policy/"+self.init_time
         makedirs("/".join(mypath.split("/")[:-1]))
         print("saving policy checkpoint to:", mypath, "episode:", episode)
@@ -40,35 +45,28 @@ class Checkpoint(object):
             saver = tf.train.Saver()
             saver.save(val_func.sess, mypath, global_step=episode)
 
-        # pickle and save scaler
-        mypath = self.checkpoints_dir+"/scaler/"+self.init_time
-        makedirs("/".join(mypath.split("/")[:-1]))
-        print("saving scaler checkpoint to:", mypath, "episode:", episode)
-        with open(mypath+"-"+str(episode)+".scaler", 'wb') as f:
-            pickle.dump((scaler, episode), f)
+    def restore(self, restore_path):
+        # unpickle and restore scaler - NOTE: this file includes some other variables too
+        mypath = restore_path.replace('policy', 'scaler')
+        with open(mypath+".scaler", 'rb') as f:
+            (scaler, episode, obs_dim, act_dim, kl_targ, self.init_time) = pickle.load(f)
 
-    def restore(self, policy, val_func, scaler, restore_path):
         # policy
         mypath = restore_path
         print("restoring policy checkpoint from:", mypath)
-        policy = Policy(policy.obs_dim, policy.act_dim, policy.kl_targ, restore_path=mypath)
+        policy = Policy(obs_dim, act_dim, kl_targ, restore_path=mypath)
         print("0000000")
         Checkpoint.dump_vars(policy.g)
 
         # val_func
         mypath = restore_path.replace('policy', 'val_func')
         print("restoring policy checkpoint from:", mypath)
-        val_func = NNValueFunction(val_func.obs_dim, restore_path=mypath)
+        val_func = NNValueFunction(obs_dim, restore_path=mypath)
         print("2222222")
         Checkpoint.dump_vars(val_func.g)
 
-        # unpickle and restore scaler
-        mypath = restore_path.replace('policy', 'scaler')
-        with open(mypath+".scaler", 'rb') as f:
-            (scaler, episode) = pickle.load(f)
-
         print("FINISHED RESTORE")
-        return(policy, val_func, scaler, episode)
+        return(policy, val_func, scaler, episode, obs_dim, act_dim, kl_targ)
 
 def makedirs(path):
     try:
