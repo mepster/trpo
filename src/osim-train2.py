@@ -151,11 +151,11 @@ def special_reward(obs, reward, step):
     #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
     #print("x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
 
-    print("step:", step, "reward:", reward, "error:", error)
-    print("  PELVIS:", pelvis)
-    print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
-    print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
-    print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
+    #print("step:", step, "reward:", reward, "error:", error)
+    #print("  PELVIS:", pelvis)
+    #print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
+    #print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
+    #print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
 
     trace["head"].append(head)
     trace["head_targ"].append(head_targ)
