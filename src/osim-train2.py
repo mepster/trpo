@@ -120,7 +120,7 @@ def replace_none(targ, act):
         if targ[i] == BLANK:
             targ[i] = act[i]
     
-def special_reward(obs, reward, step):
+def special_reward(obs, reward, step, animate):
     error = 0.0
     
     head_abs = np.array([obs[STATE_HEAD_X], obs[STATE_HEAD_Y]])
@@ -157,12 +157,14 @@ def special_reward(obs, reward, step):
     #print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
     #print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
 
-    trace["head"].append(head)
-    trace["head_targ"].append(head_targ)
-    trace["talus_l"].append(talus_l)
-    trace["talus_l_targ"].append(talus_l_targ)
-    trace["talus_r"].append(talus_r)
-    trace["talus_r_targ"].append(talus_r_targ)
+    if animate:
+        # HACK
+        trace["head"].append(head)
+        trace["head_targ"].append(head_targ)
+        trace["talus_l"].append(talus_l)
+        trace["talus_l_targ"].append(talus_l_targ)
+        trace["talus_r"].append(talus_r)
+        trace["talus_r_targ"].append(talus_r_targ)
 
     return reward - error
 
@@ -203,7 +205,7 @@ def run_episode(env, policy, scaler, animate=False):
 
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
         #print(obs)
-        reward = special_reward(obs, reward, step)
+        reward = special_reward(obs, reward, step, animate)
         #print("reward:", reward)
         if done:
             # HACK
