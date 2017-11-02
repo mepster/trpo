@@ -441,7 +441,7 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
         observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=animate)
         exit(0)
     
-    if submit:
+    if 0:
         # Settings
         remote_base = 'http://grader.crowdai.org:1729'
         token = 'a83412a94593cae3a491f3ee28ff44e1'
@@ -468,7 +468,6 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
         
         #observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=False, submit=submit)
         exit(0)
-
 
     ######
        
