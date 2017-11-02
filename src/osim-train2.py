@@ -100,10 +100,12 @@ trace = {'head': [],
 
 def targs(x):
     x0=0.0
-    k2=2
+    # how quickly to accelerate stepping
+    k2=2.0
     x2=x * (2/(1.0+np.exp(-k2*(x-x0)))-1.0)
 
-    k3=10.0
+    # how quickly to bend head
+    k3=5.0
     x3=2/(1.0+np.exp(-k3*(x-x0)))-1.0
 
     head_targ = np.array([0.5*x3, BLANK])
@@ -132,8 +134,8 @@ def special_reward(obs, reward, step, animate):
     talus_l = talus_l_abs - pelvis
     talus_r = talus_r_abs - pelvis
 
-    # relative to pelvis
-    cycle = 0.075
+    #cycle = 0.075
+    cycle = 0.05
     (head_targ, talus_l_targ, talus_r_targ) = targs(step/cycle)
     replace_none(head_targ, head)
     replace_none(talus_l_targ, talus_l)
