@@ -73,6 +73,12 @@ STATE_PELVIS_Y = 2
 MUSCLES_PSOAS_R = 3
 MUSCLES_PSOAS_L = 11
 
+STATE_HEAD_X = 22
+STATE_HEAD_Y = 23
+STATE_PELVIS_ALT_X = 24
+STATE_PELVIS_ALT_Y = 25
+STATE_TORSO_X = 26
+STATE_TORSO_Y = 27
 STATE_TOES_L_X = 28
 STATE_TOES_L_Y = 29
 STATE_TOES_R_X = 30
@@ -81,30 +87,64 @@ STATE_TALUS_L_X = 32
 STATE_TALUS_L_Y = 33
 STATE_TALUS_R_X = 34
 STATE_TALUS_R_Y = 35
+BLANK = -10.0
 
-def special_reward(obs, reward, step):
-    error = 0.0
-    
-    cycle=0.075
-    x = step/cycle
-
+def targs(x):
     k1=0.5
     x0=0.0
     x2 = x/(1.0+np.exp(-1.0*k1*(x-x0)))
 
-    l_targ = -0.3+0.4*np.sin(np.pi*x2)       # relative to pelvis
-    r_targ = -0.3+0.4*np.sin(np.pi*x2+np.pi) # relative to pelvis
-    l_act = obs[STATE_TALUS_L_X] - obs[STATE_PELVIS_X] 
-    r_act = obs[STATE_TALUS_R_X] - obs[STATE_PELVIS_X]
-    l_diff = l_act-l_targ
-    r_diff = r_act-r_targ
+    head_targ = np.array([BLANK, BLANK])
+    talus_l_targ = np.array([-0.3+0.4*np.sin(np.pi*x2),       BLANK])
+    talus_r_targ = np.array([-0.3+0.4*np.sin(np.pi*x2+np.pi), BLANK])
 
+    return (head_targ, talus_l_targ, talus_r_targ)
+
+def err(x):
+    return np.sqrt((x**2).sum())
+
+def replace_none(targ, act):
+    for i in range(2):
+        if targ[i] == BLANK:
+            targ[i] = act[i]
+    
+def special_reward(obs, reward, step):
+    error = 0.0
+    
+    head_abs = np.array([obs[STATE_HEAD_X], obs[STATE_HEAD_Y]])
+    talus_l_abs = np.array([obs[STATE_TALUS_L_X], obs[STATE_TALUS_L_Y]])
+    talus_r_abs = np.array([obs[STATE_TALUS_R_X], obs[STATE_TALUS_R_Y]])
+    pelvis = np.array([obs[STATE_PELVIS_X], obs[STATE_PELVIS_Y]])
+
+    head = head_abs - pelvis
+    talus_l = talus_l_abs - pelvis
+    talus_r = talus_r_abs - pelvis
+
+    # relative to pelvis
+    cycle = 0.075
+    (head_targ, talus_l_targ, talus_r_targ) = targs(step/cycle)
+    replace_none(head_targ, head)
+    replace_none(talus_l_targ, talus_l)
+    replace_none(talus_r_targ, talus_r)
+
+    head_diff = head_targ - head
+    talus_l_diff = talus_l_targ - talus_l
+    talus_r_diff = talus_r_targ - talus_r
+    
     k2=0.02 # error term relative magnitude compared to reward
     k3=0.5 # rate of damping function
-    error = k2*math.sqrt(l_diff*l_diff + r_diff*r_diff)*math.exp(-k3*x)
+
+    error = k2 * ( err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
+    #error = k2*math.sqrt(l_diff*l_diff + r_diff*r_diff)*math.exp(-k3*x)
     #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
-    #print("step:", step, "x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
-    #print("reward:", reward, "error:", error)
+    #print("x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
+
+    print("step:", step, "reward:", reward, "error:", error)
+    print("  PELVIS:", pelvis)
+    print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
+    print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
+    print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
+                             
     return reward - error
 
 def run_episode(env, policy, scaler, animate=False):
@@ -146,8 +186,6 @@ def run_episode(env, policy, scaler, animate=False):
         #print(obs)
         reward = special_reward(obs, reward, step)
         #print("reward:", reward)
-        #print("pelvis:", obs[STATE_PELVIS_X], obs[STATE_PELVIS_Y])
-        #print("talus_r:", obs[STATE_TOES_R_X], obs[STATE_TOES_R_Y])
 
         obs = np.array(obs)
         if not isinstance(reward, float):
