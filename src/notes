@@ -1,0 +1,12 @@
+
+# lunge forward:
+./osim-train2.py Osim -a --nprocs 1 -b 20 -r Nov-01_10:21:16-49140
+
+# first try at rewarding steps - leans back:
+./osim-train2.py Osim -a --nprocs 1 -b 20 -r Nov-01_20:05:27-46620
+
+# first try at rewarding steps - leans back:
+./osim-train2.py Osim -a --nprocs 1 -b 20 -r Nov-02_06:51:52-6930
+
+# to plot:
+./plot.py

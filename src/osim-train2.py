@@ -90,15 +90,20 @@ STATE_TALUS_R_X = 34
 STATE_TALUS_R_Y = 35
 BLANK = -10.0
 
-trace = {'head': [],
-              'head_targ': [],
-              'talus_l': [],
-              'talus_l_targ': [],
-              'talus_r': [],
-              'talus_r_targ': [],
-              'pelvis': [] }
+last_talus_l_targ = None
+last_talus_r_targ = None
 
-def targs(x):
+trace = {'head': [],
+         'head_targ': [],
+         'talus_l': [],
+         'talus_l_targ': [],
+         'talus_r': [],
+         'talus_r_targ': [],
+         'pelvis': [] }
+
+def targs(x, pelvis, talus_l_abs, talus_r_abs):
+    global last_talus_l_targ
+    global last_talus_r_targ
     x0=0.0
     # how quickly to accelerate stepping
     k2=2.0
@@ -109,9 +114,24 @@ def targs(x):
     x3=2/(1.0+np.exp(-k3*(x-x0)))-1.0
 
     head_targ = np.array([0.5*x3, BLANK])
-    talus_l_targ = np.array([0.4*np.sin(np.pi*x2+np.pi),       BLANK])
+    talus_l_targ = np.array([0.4*np.sin(np.pi*x2+np.pi), BLANK])
     talus_r_targ = np.array([0.4*np.sin(np.pi*x2), BLANK])
 
+    lift_foot = 0.2
+    if last_talus_l_targ is not None:
+        if talus_l_targ[0] > last_talus_l_targ[0]: # talus_l_targ moving forward in x
+            talus_l_targ[1] = -pelvis[1]+lift_foot # lift foot
+        else: 
+            talus_l_targ[1] = -pelvis[1]           # keep foot on ground
+
+    if last_talus_r_targ is not None:
+        if talus_r_targ[0] > last_talus_r_targ[0]: # talus_r_targ moving forward in x
+            talus_r_targ[1] = -pelvis[1]+lift_foot # lift foot
+        else: 
+            talus_r_targ[1] = -pelvis[1]           # keep foot on ground
+    last_talus_l_targ = talus_l_targ
+    last_talus_r_targ = talus_r_targ
+ 
     return (head_targ, talus_l_targ, talus_r_targ)
 
 def err(x):
@@ -121,7 +141,7 @@ def replace_none(targ, act):
     for i in range(2):
         if targ[i] == BLANK:
             targ[i] = act[i]
-    
+
 def special_reward(obs, reward, step, animate):
     error = 0.0
     
@@ -136,7 +156,7 @@ def special_reward(obs, reward, step, animate):
 
     #cycle = 0.075
     cycle = 0.05
-    (head_targ, talus_l_targ, talus_r_targ) = targs(step/cycle)
+    (head_targ, talus_l_targ, talus_r_targ) = targs(step/cycle, pelvis, talus_l_abs, talus_r_abs)
     replace_none(head_targ, head)
     replace_none(talus_l_targ, talus_l)
     replace_none(talus_r_targ, talus_r)
@@ -145,10 +165,10 @@ def special_reward(obs, reward, step, animate):
     talus_l_diff = talus_l_targ - talus_l
     talus_r_diff = talus_r_targ - talus_r
     
-    k2=0.005 # error term relative magnitude compared to reward
+    k2=0.005 # error term scaling relative to reward
     k3=0.5 # rate of damping function
 
-    error = k2 * ( err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
+    error = k2 * ( 0.2*err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
     #error = k2*math.sqrt(l_diff*l_diff + r_diff*r_diff)*math.exp(-k3*x)
     #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
     #print("x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
@@ -421,6 +441,37 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
         observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=animate)
         exit(0)
     
+    if submit:
+        # Settings
+        remote_base = 'http://grader.crowdai.org:1729'
+        token = 'a83412a94593cae3a491f3ee28ff44e1'
+        
+        env = RunEnv(visualize=False)
+        client = Client(remote_base)
+
+        # Create environment
+        observation = client.env_create(args.token)
+
+        # Run a single step
+        #
+        # The grader runs 3 simulations of at most 1000 steps each. We stop after the last one
+        while True:
+            v = np.array(observation).reshape((-1,1,env.observation_space.shape[0]))
+            [observation, reward, done, info] = client.env_step(env.action_space.sample().tolist())
+            print(observation)
+            if done:
+                observation = client.env_reset()
+                if not observation:
+                    break
+
+        client.submit()
+        
+        #observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=False, submit=submit)
+        exit(0)
+
+
+    ######
+       
     worker_batch_size = int(batch_size / mpi_util.nworkers) # HACK
     if (worker_batch_size*mpi_util.nworkers != batch_size):
         print("batch_size:", batch_size, " is not divisible by nworkers:", mpi_util.nworkers)
