@@ -110,25 +110,25 @@ def targs(x, pelvis, talus_l_abs, talus_r_abs):
     x2=x * (2/(1.0+np.exp(-k2*(x-x0)))-1.0)
 
     # how quickly to bend head
-    k3=5.0
+    k3=10.0
     x3=2/(1.0+np.exp(-k3*(x-x0)))-1.0
 
     head_targ = np.array([0.5*x3, BLANK])
     talus_l_targ = np.array([0.4*np.sin(np.pi*x2+np.pi), BLANK])
     talus_r_targ = np.array([0.4*np.sin(np.pi*x2), BLANK])
 
-    lift_foot = 0.2
+    lift_ankle = 0.3
     if last_talus_l_targ is not None:
         if talus_l_targ[0] > last_talus_l_targ[0]: # talus_l_targ moving forward in x
-            talus_l_targ[1] = -pelvis[1]+lift_foot # lift foot
+            talus_l_targ[1] = -pelvis[1]+lift_ankle # lift ankle
         else: 
-            talus_l_targ[1] = -pelvis[1]           # keep foot on ground
+            talus_l_targ[1] = -pelvis[1]           # keep ankle on ground
 
     if last_talus_r_targ is not None:
         if talus_r_targ[0] > last_talus_r_targ[0]: # talus_r_targ moving forward in x
-            talus_r_targ[1] = -pelvis[1]+lift_foot # lift foot
+            talus_r_targ[1] = -pelvis[1]+lift_ankle # lift ankle
         else: 
-            talus_r_targ[1] = -pelvis[1]           # keep foot on ground
+            talus_r_targ[1] = -pelvis[1]           # keep ankle on ground
     last_talus_l_targ = talus_l_targ
     last_talus_r_targ = talus_r_targ
  
@@ -165,7 +165,7 @@ def special_reward(obs, reward, step, animate):
     talus_l_diff = talus_l_targ - talus_l
     talus_r_diff = talus_r_targ - talus_r
     
-    k2=0.03 # error term scaling relative to reward
+    k2=0.01 # error term scaling relative to main reward
     k3=0.5 # rate of damping function
 
     error = k2 * ( 0.2*err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
@@ -192,7 +192,7 @@ def special_reward(obs, reward, step, animate):
 
     head_vel_reward =  obs[STATE_HEAD_X] - last_obs[STATE_HEAD_X]
     # print("head_vel_reward:", head_vel_reward)
-    return reward - error + head_vel_reward
+    return reward - error + 0.5*head_vel_reward
 
 def run_episode(env, policy, scaler, animate=False):
     """ Run single episode with option to animate
