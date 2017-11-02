@@ -46,26 +46,29 @@ class Checkpoint(object):
             saver.save(val_func.sess, mypath, global_step=episode)
 
     def restore(self, restore_path):
+        name=restore_path.split("/")[-1] # remove preceding/path/components/to/name
+
         # unpickle and restore scaler - NOTE: this file includes some other variables too
-        mypath = restore_path
+        mypath = "saves/scaler/"+name
+        print("restoring scaler checkpoint from:", mypath)
         with open(mypath+".scaler", 'rb') as f:
             (scaler, episode, obs_dim, act_dim, kl_targ, self.init_time) = pickle.load(f)
 
         # policy
-        mypath = restore_path.replace('scaler', 'policy')
+        mypath = "saves/policy/"+name
         print("restoring policy checkpoint from:", mypath)
         policy = Policy(obs_dim, act_dim, kl_targ, restore_path=mypath)
-        print("0000000")
+        print("restored policy:")
         Checkpoint.dump_vars(policy.g)
 
         # val_func
-        mypath = restore_path.replace('scaler', 'val_func')
-        print("restoring policy checkpoint from:", mypath)
+        mypath = "saves/val_func/"+name
+        print("restoring val_func checkpoint from:", mypath)
         val_func = NNValueFunction(obs_dim, restore_path=mypath)
-        print("2222222")
+        print("restored val_func:")
         Checkpoint.dump_vars(val_func.g)
 
-        print("FINISHED RESTORE")
+        print("finished restore.")
         return(policy, val_func, scaler, episode, obs_dim, act_dim, kl_targ)
 
 def makedirs(path):

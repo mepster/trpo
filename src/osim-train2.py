@@ -145,7 +145,7 @@ def special_reward(obs, reward, step, animate):
     talus_l_diff = talus_l_targ - talus_l
     talus_r_diff = talus_r_targ - talus_r
     
-    k2=0.02 # error term relative magnitude compared to reward
+    k2=0.005 # error term relative magnitude compared to reward
     k3=0.5 # rate of damping function
 
     error = k2 * ( err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
@@ -153,11 +153,12 @@ def special_reward(obs, reward, step, animate):
     #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
     #print("x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
 
-    #print("step:", step, "reward:", reward, "error:", error)
-    #print("  PELVIS:", pelvis)
-    #print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
-    #print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
-    #print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
+    if animate:
+        print("step:", step, "reward:", reward, "error:", error)
+        print("  PELVIS:", pelvis)
+        print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
+        print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
+        print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
 
     if animate:
         # HACK
@@ -214,7 +215,7 @@ def run_episode(env, policy, scaler, animate=False):
             if animate:
                 with open("trace", 'wb') as f:
                     pickle.dump(trace, f)
-                    print("wrote trace")
+                    print("wrote trace.")
         
         obs = np.array(obs)
         if not isinstance(reward, float):
