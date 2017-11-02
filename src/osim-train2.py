@@ -34,7 +34,7 @@ import numpy as np
 
 from osim.env import *
 from osim.http.client import Client
-#from keras.optimizers import RMSprop
+
 import math
 
 from policy import Policy
@@ -60,7 +60,6 @@ class GracefulKiller:
 
     def exit_gracefully(self, signum, frame):
         self.kill_now = True
-
 
 def init_osim(animate=False):
     env = RunEnv(animate)
@@ -92,6 +91,7 @@ BLANK = -10.0
 
 last_talus_l_targ = None
 last_talus_r_targ = None
+last_obs = None
 
 trace = {'head': [],
          'head_targ': [],
@@ -165,7 +165,7 @@ def special_reward(obs, reward, step, animate):
     talus_l_diff = talus_l_targ - talus_l
     talus_r_diff = talus_r_targ - talus_r
     
-    k2=0.005 # error term scaling relative to reward
+    k2=0.03 # error term scaling relative to reward
     k3=0.5 # rate of damping function
 
     error = k2 * ( 0.2*err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
@@ -189,7 +189,10 @@ def special_reward(obs, reward, step, animate):
         trace["talus_r"].append(talus_r)
         trace["talus_r_targ"].append(talus_r_targ)
 
-    return reward - error
+
+    head_vel_reward =  obs[STATE_HEAD_X] - last_obs[STATE_HEAD_X]
+    # print("head_vel_reward:", head_vel_reward)
+    return reward - error + head_vel_reward
 
 def run_episode(env, policy, scaler, animate=False):
     """ Run single episode with option to animate
@@ -207,6 +210,13 @@ def run_episode(env, policy, scaler, animate=False):
         rewards: shape = (episode len,)
         unscaled_obs: useful for training scaler, shape = (episode len, obs_dim)
     """
+    global last_talus_l_targ
+    global last_talus_r_targ
+    last_talus_l_targ = None
+    last_talus_r_targ = None
+    global last_obs
+    last_obs = None
+
     obs = np.array(env.reset(difficulty=0))
     observes, actions, rewards, unscaled_obs = [], [], [], []
     done = False
@@ -217,6 +227,7 @@ def run_episode(env, policy, scaler, animate=False):
     while not done:
         if animate:
             env.render()
+        last_obs = obs # save last one before reshaping
         obs = obs.astype(np.float32).reshape((1, -1))
         obs = np.append(obs, [[step]], axis=1)  # add time step feature
         unscaled_obs.append(obs)
@@ -390,7 +401,7 @@ def log_batch_stats(observes, actions, advantages, disc_sum_rew, logger, episode
                 })
 
 def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
-         policy_hid_list, valfunc_hid_list, gpu_pct, restore_path, animate):
+         policy_hid_list, valfunc_hid_list, gpu_pct, restore_path, animate, submit):
     """ Main training loop
 
     Args:
@@ -441,33 +452,61 @@ def main(env_name, num_episodes, gamma, lam, kl_targ, batch_size, nprocs,
         observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=animate)
         exit(0)
     
-    if 0:
+    if submit:
         # Settings
-        remote_base = 'http://grader.crowdai.org:1729'
+        #remote_base = 'http://grader.crowdai.org:1729'
+        remote_base = 'http://grader.crowdai.org:1730'
         token = 'a83412a94593cae3a491f3ee28ff44e1'
         
-        env = RunEnv(visualize=False)
         client = Client(remote_base)
 
         # Create environment
-        observation = client.env_create(args.token)
+        observation = client.env_create(token)
+        step = 0.0
+        observes, actions, rewards, unscaled_obs = [], [], [], []
+        scale, offset = scaler.get()
+        scale[-1] = 1.0  # don't scale time step feature
+        offset[-1] = 0.0  # don't offset time step feature
 
         # Run a single step
         #
         # The grader runs 3 simulations of at most 1000 steps each. We stop after the last one
         while True:
-            v = np.array(observation).reshape((-1,1,env.observation_space.shape[0]))
-            [observation, reward, done, info] = client.env_step(env.action_space.sample().tolist())
-            print(observation)
+            obs = np.array(observation).astype(np.float32).reshape((1, -1))
+            print("OBSERVATION TYPE:", type(obs), obs.shape)
+            print(obs)
+            obs = np.append(obs, [[step]], axis=1)  # add time step feature
+            unscaled_obs.append(obs)
+            obs = (obs - offset) * scale  # center and scale observations
+            observes.append(obs)
+
+            action = policy.sample(obs).astype(np.float32).reshape((-1, 1))
+            print("ACTION TYPE:", type(action), action.shape)
+            print(action)
+            actions.append(action)
+
+            [observation, reward, done, info] = client.env_step(action.tolist())
+            print("step:", step, "reward:", reward)
+
+            if not isinstance(reward, float):
+                reward = np.asscalar(reward)
+            rewards.append(reward)
+            step += 1e-3  # increment time step feature
+
             if done:
+                print("================================== RESTARTING =================================")
                 observation = client.env_reset()
+                step = 0.0
+                observes, actions, rewards, unscaled_obs = [], [], [], []
+                scale, offset = scaler.get()
+                scale[-1] = 1.0  # don't scale time step feature
+                offset[-1] = 0.0  # don't offset time step feature
                 if not observation:
                     break
 
         client.submit()
-        
-        #observes, actions, rewards, unscaled_obs = run_episode(env, policy, scaler, animate=False, submit=submit)
         exit(0)
+
 
     ######
        
@@ -541,6 +580,7 @@ if __name__ == "__main__":
                         help='Restore path',
                         default=None)
 
+    parser.add_argument('-s', '--submit', action='store_true')
     parser.add_argument('-a', '--animate', action='store_true')
     parser.add_argument('--nprocs', type=int, default=1)
     parser.add_argument('--gpu_pct', type=float, default=0.0, help ='tensorflow  per_process_gpu_memory_fraction  option. .08 may work for 10 processes')
