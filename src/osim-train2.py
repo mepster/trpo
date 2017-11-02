@@ -49,6 +49,7 @@ import signal
 import itertools
 
 import mpi_util
+import pickle
 
 class GracefulKiller:
     """ Gracefully exit program on CTRL-C """
@@ -89,14 +90,25 @@ STATE_TALUS_R_X = 34
 STATE_TALUS_R_Y = 35
 BLANK = -10.0
 
-def targs(x):
-    k1=0.5
-    x0=0.0
-    x2 = x/(1.0+np.exp(-1.0*k1*(x-x0)))
+trace = {'head': [],
+              'head_targ': [],
+              'talus_l': [],
+              'talus_l_targ': [],
+              'talus_r': [],
+              'talus_r_targ': [],
+              'pelvis': [] }
 
-    head_targ = np.array([BLANK, BLANK])
-    talus_l_targ = np.array([-0.3+0.4*np.sin(np.pi*x2),       BLANK])
-    talus_r_targ = np.array([-0.3+0.4*np.sin(np.pi*x2+np.pi), BLANK])
+def targs(x):
+    x0=0.0
+    k2=2
+    x2=x * (2/(1.0+np.exp(-k2*(x-x0)))-1.0)
+
+    k3=10.0
+    x3=2/(1.0+np.exp(-k3*(x-x0)))-1.0
+
+    head_targ = np.array([0.5*x3, BLANK])
+    talus_l_targ = np.array([0.4*np.sin(np.pi*x2+np.pi),       BLANK])
+    talus_r_targ = np.array([0.4*np.sin(np.pi*x2), BLANK])
 
     return (head_targ, talus_l_targ, talus_r_targ)
 
@@ -144,7 +156,14 @@ def special_reward(obs, reward, step):
     print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
     print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
     print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
-                             
+
+    trace["head"].append(head)
+    trace["head_targ"].append(head_targ)
+    trace["talus_l"].append(talus_l)
+    trace["talus_l_targ"].append(talus_l_targ)
+    trace["talus_r"].append(talus_r)
+    trace["talus_r_targ"].append(talus_r_targ)
+
     return reward - error
 
 def run_episode(env, policy, scaler, animate=False):
@@ -186,7 +205,13 @@ def run_episode(env, policy, scaler, animate=False):
         #print(obs)
         reward = special_reward(obs, reward, step)
         #print("reward:", reward)
-
+        if done:
+            # HACK
+            if animate:
+                with open("trace", 'wb') as f:
+                    pickle.dump(trace, f)
+                    print("wrote trace")
+        
         obs = np.array(obs)
         if not isinstance(reward, float):
             reward = np.asscalar(reward)
