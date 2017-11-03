@@ -110,21 +110,21 @@ STATE_TALUS_R_X = 34
 STATE_TALUS_R_Y = 35
 BLANK = -10.0
 
-last_femur_l_targ = None
-last_femur_r_targ = None
+last_talus_l_targ = None
+last_talus_r_targ = None
 last_obs = None
 
 trace = {'head': [],
          'head_targ': [],
-         'femur_l': [],
-         'femur_l_targ': [],
-         'femur_r': [],
-         'femur_r_targ': [],
+         'talus_l': [],
+         'talus_l_targ': [],
+         'talus_r': [],
+         'talus_r_targ': [],
          'pelvis': [] }
 
-def targs(x, pelvis, femur_l_abs, femur_r_abs):
-    global last_femur_l_targ
-    global last_femur_r_targ
+def targs(x, pelvis, talus_l_abs, talus_r_abs):
+    global last_talus_l_targ
+    global last_talus_r_targ
     x0=0.0
     # how quickly to accelerate stepping
     k2=2.0
@@ -135,26 +135,24 @@ def targs(x, pelvis, femur_l_abs, femur_r_abs):
     x3=2/(1.0+np.exp(-k3*(x-x0)))-1.0
 
     head_targ = np.array([0.5*x3, BLANK])
-    femur_l_targ = np.array([0.3*np.sin(np.pi*x2+np.pi), BLANK])
-    femur_r_targ = np.array([0.3*np.sin(np.pi*x2), BLANK])
+    talus_l_targ = np.array([0.3*np.sin(np.pi*x2+np.pi), BLANK])
+    talus_r_targ = np.array([0.3*np.sin(np.pi*x2), BLANK])
 
-    low_femur = 0.85
-    high_femur = low_femur+.3
-    if last_femur_l_targ is not None:
-        if femur_l_targ[0] > last_femur_l_targ[0]: # femur_l_targ moving forward in x
-            femur_l_targ[1] = -pelvis[1]+high_femur # lift femur
+    low_talus = 0.0
+    high_talus = low_talus+.3
+    if last_talus_l_targ is not None:
+        if talus_l_targ[0] > last_talus_l_targ[0]: # talus_l_targ moving forward in x
+            talus_l_targ[1] = high_talus # lift talus in y
         else: 
-            femur_l_targ[1] = -pelvis[1]+low_femur
+            talus_l_targ[1] = low_talus
 
-    if last_femur_r_targ is not None:
-        if femur_r_targ[0] > last_femur_r_targ[0]: # femur_r_targ moving forward in x
-            femur_r_targ[1] = -pelvis[1]+high_femur # lift femur
+    if last_talus_r_targ is not None:
+        if talus_r_targ[0] > last_talus_r_targ[0]: # talus_r_targ moving forward in x
+            talus_r_targ[1] = high_talus # lift talus in y
         else: 
-            femur_r_targ[1] = -pelvis[1]+low_femur
-    last_femur_l_targ = femur_l_targ
-    last_femur_r_targ = femur_r_targ
- 
-    return (head_targ, femur_l_targ, femur_r_targ)
+            talus_r_targ[1] = low_talus
+
+    return (head_targ, talus_l_targ, talus_r_targ)
 
 def err(x):
     return np.sqrt((x**2).sum())
@@ -165,35 +163,47 @@ def replace_none(targ, act):
             targ[i] = act[i]
 
 def special_reward(env, obs, reward, step, animate):
-    error = 0.0
+    global last_talus_l_targ
+    global last_talus_r_targ
+    step = step-0.02 # delay adding special reward for 0.02
+
+    error = 0.0 # initialize
 
     # extra body transforms to get femurs
     body_transforms = np.array([[env.osim_model.get_body(body).getTransformInGround(env.osim_model.state).p()[i] for i in range(2)] for body in ['femur_l', 'femur_r']]).flatten()
     #print("femur_l and femur_r:", body_transforms)
 
     head_abs = np.array([obs[STATE_HEAD_X], obs[STATE_HEAD_Y]])
-    femur_l_abs = np.array([body_transforms[0], body_transforms[1]])
-    femur_r_abs = np.array([body_transforms[2], body_transforms[3]])
+    talus_l_abs = np.array([body_transforms[0], body_transforms[1]])
+    talus_r_abs = np.array([body_transforms[2], body_transforms[3]])
     pelvis = np.array([obs[STATE_PELVIS_X], obs[STATE_PELVIS_Y]])
 
     head = head_abs - pelvis
-    femur_l = femur_l_abs - pelvis
-    femur_r = femur_r_abs - pelvis
+    talus_l = talus_l_abs - pelvis
+    talus_r = talus_r_abs - pelvis
 
     #cycle = 0.075
     cycle = 0.05
-    (head_targ, femur_l_targ, femur_r_targ) = targs(step/cycle, pelvis, femur_l_abs, femur_r_abs)
+    if (step<0):
+        head_targ=[BLANK, BLANK]
+        talus_l_targ=[BLANK, BLANK]
+        talus_r_targ=[BLANK, BLANK]
+    else:
+        (head_targ, talus_l_targ, talus_r_targ) = targs(step/cycle, pelvis, talus_l_abs, talus_r_abs)
+        last_talus_l_targ = talus_l_targ
+        last_talus_r_targ = talus_r_targ
+ 
     replace_none(head_targ, head)
-    replace_none(femur_l_targ, femur_l)
-    replace_none(femur_r_targ, femur_r)
+    replace_none(talus_l_targ, talus_l)
+    replace_none(talus_r_targ, talus_r)
 
     head_diff = head_targ - head
-    femur_l_diff = femur_l_targ - femur_l
-    femur_r_diff = femur_r_targ - femur_r
+    talus_l_diff = talus_l_targ - talus_l
+    talus_r_diff = talus_r_targ - talus_r
     
     k3=0.5 # rate of damping function
 
-    error = ( 0.2*err(head_diff) + err(femur_l_diff) + err(femur_r_diff))
+    error = ( 0.02*err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
     #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
     #print("x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
 
@@ -202,17 +212,17 @@ def special_reward(env, obs, reward, step, animate):
         print("  PELVIS:", pelvis)
         print("  PELVIS_ALT:", [obs[STATE_PELVIS_ALT_X], obs[STATE_PELVIS_ALT_Y]])
         print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
-        print("  FEMUR_L:", femur_l, "targ:", femur_l_targ, "diff:", femur_l_diff, "err:", err(femur_l_diff))
-        print("  FEMUR_R:", femur_r, "targ:", femur_r_targ, "diff:", femur_r_diff, "err:", err(femur_r_diff))
+        print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
+        print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
 
     if animate:
         # HACK
         trace["head"].append(head)
         trace["head_targ"].append(head_targ)
-        trace["femur_l"].append(femur_l)
-        trace["femur_l_targ"].append(femur_l_targ)
-        trace["femur_r"].append(femur_r)
-        trace["femur_r_targ"].append(femur_r_targ)
+        trace["talus_l"].append(talus_l)
+        trace["talus_l_targ"].append(talus_l_targ)
+        trace["talus_r"].append(talus_r)
+        trace["talus_r_targ"].append(talus_r_targ)
 
     mass_vel_reward =  1.0*(obs[STATE_MASS_X] - last_obs[STATE_MASS_X])
     head_vel_reward =  0.1*(obs[STATE_HEAD_X] - last_obs[STATE_HEAD_X])
@@ -220,7 +230,11 @@ def special_reward(env, obs, reward, step, animate):
     #print("mass_vel_reward:", mass_vel_reward)
     #print("head_vel_reward:", head_vel_reward)
     #print("error:", error)
-    return mass_vel_reward  + head_vel_reward - error
+
+    if step<0: # delay a bit before adding in head and error
+        return mass_vel_reward
+    else:
+        return mass_vel_reward  + head_vel_reward - error
 
 def run_episode(env, policy, scaler, animate=False):
     """ Run single episode with option to animate
@@ -238,10 +252,10 @@ def run_episode(env, policy, scaler, animate=False):
         rewards: shape = (episode len,)
         unscaled_obs: useful for training scaler, shape = (episode len, obs_dim)
     """
-    global last_femur_l_targ
-    global last_femur_r_targ
-    last_femur_l_targ = None
-    last_femur_r_targ = None
+    global last_talus_l_targ
+    global last_talus_r_targ
+    last_talus_l_targ = None
+    last_talus_r_targ = None
     global last_obs
     last_obs = None
 
