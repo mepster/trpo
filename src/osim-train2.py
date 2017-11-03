@@ -68,10 +68,31 @@ def init_osim(animate=False):
 
     return env, obs_dim, act_dim
 
+STATE_PELVIS_Z = 0
 STATE_PELVIS_X = 1
 STATE_PELVIS_Y = 2
-MUSCLES_PSOAS_R = 3
-MUSCLES_PSOAS_L = 11
+STATE_PELVIS_VEL_Z = 3
+STATE_PELVIS_VEL_X = 4
+STATE_PELVIS_VEL_Y = 6
+
+STATE_HIP_R_ANGLE = 6
+STATE_KNEE_R_ANGLE = 7
+STATE_ANKLE_R_ANGLE = 8
+STATE_HIP_R_VEL = 9
+STATE_KNEE_R_VEL = 10
+STATE_ANKLE_R_VEL = 11
+
+STATE_HIP_L_ANGLE = 12
+STATE_KNEE_L_ANGLE = 13
+STATE_ANKLE_L_ANGLE = 14
+STATE_HIP_L_VEL = 15
+STATE_KNEE_L_VEL = 16
+STATE_ANKLE_L_VEL = 17
+
+STATE_MASS_X = 18
+STATE_MASS_Y = 19
+STATE_MASS_VEL = 20
+STATE_MASS_VEL_Y = 21
 
 STATE_HEAD_X = 22
 STATE_HEAD_Y = 23
@@ -89,21 +110,21 @@ STATE_TALUS_R_X = 34
 STATE_TALUS_R_Y = 35
 BLANK = -10.0
 
-last_talus_l_targ = None
-last_talus_r_targ = None
+last_femur_l_targ = None
+last_femur_r_targ = None
 last_obs = None
 
 trace = {'head': [],
          'head_targ': [],
-         'talus_l': [],
-         'talus_l_targ': [],
-         'talus_r': [],
-         'talus_r_targ': [],
+         'femur_l': [],
+         'femur_l_targ': [],
+         'femur_r': [],
+         'femur_r_targ': [],
          'pelvis': [] }
 
-def targs(x, pelvis, talus_l_abs, talus_r_abs):
-    global last_talus_l_targ
-    global last_talus_r_targ
+def targs(x, pelvis, femur_l_abs, femur_r_abs):
+    global last_femur_l_targ
+    global last_femur_r_targ
     x0=0.0
     # how quickly to accelerate stepping
     k2=2.0
@@ -114,25 +135,26 @@ def targs(x, pelvis, talus_l_abs, talus_r_abs):
     x3=2/(1.0+np.exp(-k3*(x-x0)))-1.0
 
     head_targ = np.array([0.5*x3, BLANK])
-    talus_l_targ = np.array([0.4*np.sin(np.pi*x2+np.pi), BLANK])
-    talus_r_targ = np.array([0.4*np.sin(np.pi*x2), BLANK])
+    femur_l_targ = np.array([0.3*np.sin(np.pi*x2+np.pi), BLANK])
+    femur_r_targ = np.array([0.3*np.sin(np.pi*x2), BLANK])
 
-    lift_ankle = 0.3
-    if last_talus_l_targ is not None:
-        if talus_l_targ[0] > last_talus_l_targ[0]: # talus_l_targ moving forward in x
-            talus_l_targ[1] = -pelvis[1]+lift_ankle # lift ankle
+    low_femur = 0.85
+    high_femur = low_femur+.3
+    if last_femur_l_targ is not None:
+        if femur_l_targ[0] > last_femur_l_targ[0]: # femur_l_targ moving forward in x
+            femur_l_targ[1] = -pelvis[1]+high_femur # lift femur
         else: 
-            talus_l_targ[1] = -pelvis[1]           # keep ankle on ground
+            femur_l_targ[1] = -pelvis[1]+low_femur
 
-    if last_talus_r_targ is not None:
-        if talus_r_targ[0] > last_talus_r_targ[0]: # talus_r_targ moving forward in x
-            talus_r_targ[1] = -pelvis[1]+lift_ankle # lift ankle
+    if last_femur_r_targ is not None:
+        if femur_r_targ[0] > last_femur_r_targ[0]: # femur_r_targ moving forward in x
+            femur_r_targ[1] = -pelvis[1]+high_femur # lift femur
         else: 
-            talus_r_targ[1] = -pelvis[1]           # keep ankle on ground
-    last_talus_l_targ = talus_l_targ
-    last_talus_r_targ = talus_r_targ
+            femur_r_targ[1] = -pelvis[1]+low_femur
+    last_femur_l_targ = femur_l_targ
+    last_femur_r_targ = femur_r_targ
  
-    return (head_targ, talus_l_targ, talus_r_targ)
+    return (head_targ, femur_l_targ, femur_r_targ)
 
 def err(x):
     return np.sqrt((x**2).sum())
@@ -142,57 +164,63 @@ def replace_none(targ, act):
         if targ[i] == BLANK:
             targ[i] = act[i]
 
-def special_reward(obs, reward, step, animate):
+def special_reward(env, obs, reward, step, animate):
     error = 0.0
-    
+
+    # extra body transforms to get femurs
+    body_transforms = np.array([[env.osim_model.get_body(body).getTransformInGround(env.osim_model.state).p()[i] for i in range(2)] for body in ['femur_l', 'femur_r']]).flatten()
+    #print("femur_l and femur_r:", body_transforms)
+
     head_abs = np.array([obs[STATE_HEAD_X], obs[STATE_HEAD_Y]])
-    talus_l_abs = np.array([obs[STATE_TALUS_L_X], obs[STATE_TALUS_L_Y]])
-    talus_r_abs = np.array([obs[STATE_TALUS_R_X], obs[STATE_TALUS_R_Y]])
+    femur_l_abs = np.array([body_transforms[0], body_transforms[1]])
+    femur_r_abs = np.array([body_transforms[2], body_transforms[3]])
     pelvis = np.array([obs[STATE_PELVIS_X], obs[STATE_PELVIS_Y]])
 
     head = head_abs - pelvis
-    talus_l = talus_l_abs - pelvis
-    talus_r = talus_r_abs - pelvis
+    femur_l = femur_l_abs - pelvis
+    femur_r = femur_r_abs - pelvis
 
     #cycle = 0.075
     cycle = 0.05
-    (head_targ, talus_l_targ, talus_r_targ) = targs(step/cycle, pelvis, talus_l_abs, talus_r_abs)
+    (head_targ, femur_l_targ, femur_r_targ) = targs(step/cycle, pelvis, femur_l_abs, femur_r_abs)
     replace_none(head_targ, head)
-    replace_none(talus_l_targ, talus_l)
-    replace_none(talus_r_targ, talus_r)
+    replace_none(femur_l_targ, femur_l)
+    replace_none(femur_r_targ, femur_r)
 
     head_diff = head_targ - head
-    talus_l_diff = talus_l_targ - talus_l
-    talus_r_diff = talus_r_targ - talus_r
+    femur_l_diff = femur_l_targ - femur_l
+    femur_r_diff = femur_r_targ - femur_r
     
-    k2=0.01 # error term scaling relative to main reward
     k3=0.5 # rate of damping function
 
-    error = k2 * ( 0.2*err(head_diff) + err(talus_l_diff) + err(talus_r_diff))
-    #error = k2*math.sqrt(l_diff*l_diff + r_diff*r_diff)*math.exp(-k3*x)
+    error = ( 0.2*err(head_diff) + err(femur_l_diff) + err(femur_r_diff))
     #print("l_targ:", l_targ, "l_act:", l_act, "r_targ:", r_targ, "r_act:", r_act)
     #print("x:", x, "l_diff:", l_diff, "r_diff:", r_diff)
 
     if animate:
         print("step:", step, "reward:", reward, "error:", error)
         print("  PELVIS:", pelvis)
+        print("  PELVIS_ALT:", [obs[STATE_PELVIS_ALT_X], obs[STATE_PELVIS_ALT_Y]])
         print("  HEAD:", head, "targ:", head_targ, "diff:", head_diff, "err:", err(head_diff))
-        print("  TALUS_L:", talus_l, "targ:", talus_l_targ, "diff:", talus_l_diff, "err:", err(talus_l_diff))
-        print("  TALUS_R:", talus_r, "targ:", talus_r_targ, "diff:", talus_r_diff, "err:", err(talus_r_diff))
+        print("  FEMUR_L:", femur_l, "targ:", femur_l_targ, "diff:", femur_l_diff, "err:", err(femur_l_diff))
+        print("  FEMUR_R:", femur_r, "targ:", femur_r_targ, "diff:", femur_r_diff, "err:", err(femur_r_diff))
 
     if animate:
         # HACK
         trace["head"].append(head)
         trace["head_targ"].append(head_targ)
-        trace["talus_l"].append(talus_l)
-        trace["talus_l_targ"].append(talus_l_targ)
-        trace["talus_r"].append(talus_r)
-        trace["talus_r_targ"].append(talus_r_targ)
+        trace["femur_l"].append(femur_l)
+        trace["femur_l_targ"].append(femur_l_targ)
+        trace["femur_r"].append(femur_r)
+        trace["femur_r_targ"].append(femur_r_targ)
 
-
-    head_vel_reward =  obs[STATE_HEAD_X] - last_obs[STATE_HEAD_X]
-    # print("head_vel_reward:", head_vel_reward)
-    return reward - error + 0.5*head_vel_reward
+    mass_vel_reward =  1.0*(obs[STATE_MASS_X] - last_obs[STATE_MASS_X])
+    head_vel_reward =  0.1*(obs[STATE_HEAD_X] - last_obs[STATE_HEAD_X])
+    error = 0.02*error
+    print("mass_vel_reward:", mass_vel_reward)
+    print("head_vel_reward:", head_vel_reward)
+    print("error:", error)
+    return mass_vel_reward  + head_vel_reward - error
 
 def run_episode(env, policy, scaler, animate=False):
     """ Run single episode with option to animate
@@ -210,10 +238,10 @@ def run_episode(env, policy, scaler, animate=False):
         rewards: shape = (episode len,)
         unscaled_obs: useful for training scaler, shape = (episode len, obs_dim)
     """
-    global last_talus_l_targ
-    global last_talus_r_targ
-    last_talus_l_targ = None
-    last_talus_r_targ = None
+    global last_femur_l_targ
+    global last_femur_r_targ
+    last_femur_l_targ = None
+    last_femur_r_targ = None
     global last_obs
     last_obs = None
 
@@ -239,7 +267,7 @@ def run_episode(env, policy, scaler, animate=False):
 
         obs, reward, done, _ = env.step(np.squeeze(action, axis=0))
         #print(obs)
-        reward = special_reward(obs, reward, step, animate)
+        reward = special_reward(env, obs, reward, step, animate)
         #print("reward:", reward)
         if done:
             # HACK
