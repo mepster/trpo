@@ -217,9 +217,9 @@ def special_reward(env, obs, reward, step, animate):
     mass_vel_reward =  1.0*(obs[STATE_MASS_X] - last_obs[STATE_MASS_X])
     head_vel_reward =  0.1*(obs[STATE_HEAD_X] - last_obs[STATE_HEAD_X])
     error = 0.02*error
-    print("mass_vel_reward:", mass_vel_reward)
-    print("head_vel_reward:", head_vel_reward)
-    print("error:", error)
+    #print("mass_vel_reward:", mass_vel_reward)
+    #print("head_vel_reward:", head_vel_reward)
+    #print("error:", error)
     return mass_vel_reward  + head_vel_reward - error
 
 def run_episode(env, policy, scaler, animate=False):
